@@ -34,7 +34,7 @@ class GreenHouse:
     curr_temperature = 50       # fahrenheit degree
     min_temperature = 1
     max_temperature = 100
-
+    
     curr_humidity = 70          # humidity percent
     min_humidity = 1            
     max_humidity = 100
@@ -45,6 +45,11 @@ class GreenHouse:
 
     root_vent = False
     HAF_fans = False
+
+    temperature_duration = 0
+    humidity_duration = 0
+    co2_duration = 0
+    vent_duration = 0
 
     def __init__(self, curr_weight, curr_temperature, curr_humidity, curr_co2,
                 harvest_weight, min_temperature, max_temperature, 
@@ -78,9 +83,47 @@ class GreenHouse:
             self.humidifier_controller()
         if curr_action == 2:
             self.co2_controller()
-        if curr_action == 3:
-            self.roof_vent_controller()
-        if curr_action == 4:
-            self.fans_controller()
+        # if curr_action == 3:
+        #     self.roof_vent_controller()
+        # if curr_action == 4:
+        #     self.fans_controller()
         if curr_action == 5:
             self.ready_for_harvest()
+
+    
+    def plant_growth(self):
+        if self.curr_temperature < 100 and self.curr_weight > 1:
+            self.curr_weight *= 1.1
+        if self.curr_humidity > 1 and self.curr_humidity < 100:
+            self.curr_weight *= 1.15
+        if self.curr_co2 > 100 and self.curr_co2 < 1500:
+            self.curr_weight *= 1.2
+
+        
+    def temperature_controller(self, duratrion = 15):
+        if self.temperature_duration > 0:
+            self.curr_temperature *= 1.3
+            self.curr_humidity *= 1.1
+            self.temperature_duration -= 1   
+            self.plant_growth()     
+        else:
+            self.temperature_duration = duratrion
+
+    def humidifier_controller(self, duration = 15):
+        if self.humidity.duration > 0:
+            self.curr_temperature *= 1.1
+            self.curr_humidity *= 1.3
+            self.humidity.duration -= 1
+            self.plant_growth() 
+        else:
+            self.humidity_duration = duration
+
+    def co2_controller(self, duration = 15):
+        if self.co2_duration > 0:
+            self.curr_co2 *= 1.3
+            self.co2_duration -= 1
+            self.plant_growth() 
+        else:
+            self.co2_duration = duration
+
+   
