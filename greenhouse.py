@@ -8,7 +8,7 @@
 
     * Action take 
     1. Adjust temperatue controller
-        - 50F < enviroment temperature < 80F ?
+        - 50F < enviroment temperature < 80F 
 
     2. Adjust humidifier
         - environment humidity < 70%
@@ -25,7 +25,6 @@
 import numpy as np
 import random
 
-
 class GreenHouse:
     ready_harvest = False
     curr_weight = 15
@@ -34,7 +33,7 @@ class GreenHouse:
     curr_temperature = 50       # fahrenheit degree
     min_temperature = 1
     max_temperature = 100
-    
+
     curr_humidity = 70          # humidity percent
     min_humidity = 1            
     max_humidity = 100
@@ -43,12 +42,10 @@ class GreenHouse:
     min_co2 = 100
     max_co2 = 1500
 
-    root_vent = False
-    HAF_fans = False
-
     temperature_duration = 0
     humidity_duration = 0
     co2_duration = 0
+    fans_duration = 0
     vent_duration = 0
 
     def __init__(self, curr_weight, curr_temperature, curr_humidity, curr_co2,
@@ -75,19 +72,19 @@ class GreenHouse:
             ready_harvest = True
 
     
-    def action_list(self, actions):
+    def action_lists(self, actions):
         curr_action = np.argmax(actions)
         if curr_action == 0:
             self.temperature_controller()
-        if curr_action == 1:
+        elif curr_action == 1:
             self.humidifier_controller()
-        if curr_action == 2:
+        elif curr_action == 2:
             self.co2_controller()
-        # if curr_action == 3:
-        #     self.roof_vent_controller()
-        # if curr_action == 4:
-        #     self.fans_controller()
-        if curr_action == 5:
+        elif curr_action == 3:
+            self.roof_vent_controller()
+        elif curr_action == 4:
+            self.fans_controller()
+        elif curr_action == 5:
             self.ready_for_harvest()
 
     
@@ -126,4 +123,18 @@ class GreenHouse:
         else:
             self.co2_duration = duration
 
-   
+    def fans_controller(self, duration = 15):
+        if self.fans_duration > 0:
+            self.curr_temperature *= 0.99
+            self.curr_humidity *= 0.98
+        else:
+            self.fans_duration = duration
+
+    def roof_vent_controller(self, duration = 10):
+        if self.vent_duration > 0:
+            self.curr_temperature *= 0.8
+            self.curr_humidity *= 0.8
+            self.curr_co2 *= 0.8
+        else:
+            self.vent_duration = duration
+        
