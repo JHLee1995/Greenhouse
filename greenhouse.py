@@ -1,82 +1,102 @@
 """
-    Designed for GreenHouse Simulating
+    * Variable control for plant growth
+    1. temperature
+    2. humidity
+    3. co2
 
-    * Basic variable control for plant growth
-    1. Temperature
-    2. Humidity
-    3. CO2
-
-    * Action take 
-    1. Adjust temperatue controller
+    * action take 
+    0. adjust temperatue 
         - 50F < enviroment temperature < 80F 
 
-    2. Adjust humidifier
-        - environment humidity < 70%
+    1. adjust humidifier
+        - environment humidity 
 
-    3. CO2 tank       
+    2. co2 tank      
         - environment co2 level 300 - 1500 ppm
 
-    4. Roof vent  
+    3. roof vent  
         - indoor/outdoor temperature
         - co2 level decrease
-        - indoor/outdoor humidity         
+        - indoor/outdoor humidity    
+
+    5. fans
+        - indoor temperature
+        - indoor humidity
+
+    6. maintain the current environment
+        - indoor temperature/humidity/co2
 """
 
-from gym import Env
 from gym.spaces import Discrete, Box
+from gym.utils import seeding
 import numpy as np
-import random
-
-from numpy.random.mtrand import rand
 
 class GreenHouse:
     def __init__(self):
-        """
-            Actions:
-                0 : Temperature 
-                1 : Humudity
-                2 : CO2
-                3 : Roof Vent
-                4 : HAF Fans
-        """
-        self.action_space = Discrete(5)
-        self.observation_space = Box(low = np.array([0]), high = np.array([100]))
-        self.state = 10 + random.randint(0, 5)
-        self.growth_duration = 90
-        self.good_for_harvest = 95
+        self.ready_for_harvest = 95
+        self.action_space = Discrete(6)
 
-        self.cur_temperature = 55 + random.randint(-1, 1)
-        self.cur_humidity = 90 + random.randint(-3, 3)
-        self.co2_level = 750 + random.randint(-50, 50)
+        self.cur_weight = 10 #+ random.randint(0, 5)
+        self.min_weight = 10
+        self.max_weight = 95
+        
+        self.cur_temperature = 55 #+ random.randint(1, 3)
+        self.min_temperatue = 35
+        self.max_temperature = 80
+
+
+        self.cur_humidity = 55 #+ random.randint(-5, 5)
+        self.min_humidity = 40
+        self.max_humidity = 100
+
+        self.cur_co2_level = 450 #+ random.randint(-50, 50)
+        self.min_co2_level = 300
+        self.max_co2_level = 1500
+
+        # self.outside_temperatue = random.randint(50, 90)
+        # self.outside_humidity = random.randint(50, 95)
+        # self.outside_co2_level = random.randint(100, 2000)
+        
+        self.low = np.array([self.min_weight, self.min_temperatue, self.min_humidity, self.min_co2_level], dtype=np.int32)
+        self.high = np.array([self.max_weight, self.max_temperature, self.max_humidity, self.max_co2_level], dtype=np.int32)
+
+        self.state = np.array([self.cur_weight, self.cur_temperature, self.cur_humidity, self.cur_co2_level])
+        self.observation_space = Box(self.low, self.high, dtype=np.int32)
+        
 
     def step(self, action):
-        prev_state = self.state
-        self.state = self.plant_growth(action)
-        self.growth_duration -= 1
+        prev_weight = self.cur_weight
         
-        # Check reward by plant_growth function
-        if self.state - prev_state > 0:
+        self.plant_growth(action)
+        self.cur_temperature = np.clip(self.cur_temperature, self.min_temperatue, self.max_temperature)
+        self.cur_humidity = np.clip(self.cur_humidity, self.min_humidity, self.max_humidity)
+        self.cur_co2_level = np.clip(self.cur_co2_level, self.min_co2_level, self.max_co2_level)
+
+        self.environment_for_growth()
+        
+        if self.cur_weight - prev_weight > 0:
             reward = 1
         else:
             reward = -1
 
         # Check if growth is done
-        if self.growth_duration <= 0:
+        if self.cur_weight >= self.ready_for_harvest:
             done = True
         else:
             done = False
 
-        return self.state, reward, done
+        cur_state = np.array([self.cur_weight, self.cur_temperature, self.cur_humidity, self.cur_co2_level])
+        return cur_state, reward, done
 
 
     def reset(self):
-        self.state = 10 + random.randint(0, 5)
-        self.growth_duration = 90
+        self.cur_weight = 10
+        self.cur_temperature = 55
+        self.cur_humidity = 90
+        self.cur_co2_level = 750
 
-        self.cur_temperature = 55 + random.randint(-1, 1)
-        self.cur_humidity = 90 + random.randint(-3, 3)
-        self.cur_co2_level = 750 + random.randint(-50, 50)
-
+        self.state = np.array([self.cur_weight, self.cur_temperature, self.cur_humidity, self.cur_co2_level])
+        
         return self.state
 
 
@@ -91,47 +111,44 @@ class GreenHouse:
             self.roof_vent_controller()
         elif action == 4:
             self.fans_controller()
+        elif action == 5:
+            self.maintain_current_environment()
 
-        self.environment_for_growth()
-
-        return self.state
-    
+        
     def environment_for_growth(self):
-        if self.cur_temperature > 50 and self.cur_temperature < 70:
-            self.state += random.randint(1, 2)
-        if self.cur_humidity > 65 and self.cur_humidity < 85:
-            self.state += random.randint(1, 2)
-        if self.cur_co2_level > 750 and self.cur_co2_level < 1150:
-            self.state += random.randint(1, 3)
-
+        if (self.cur_temperature > 40 and self.cur_temperature < 75 
+        and self.cur_humidity > 45 and self.cur_humidity < 95 
+        and self.cur_co2_level > 500 and self.cur_co2_level < 1400):
+            self.cur_weight += 5
 
     # Action 0
     def temperature_controller(self):
-        self.cur_temperature *= 1.5
-        self.cur_humidity *= 1.5
+        self.cur_temperature += 3
+        self.cur_humidity += 1
 
     # Action 1
     def humidifier_controller(self):
-        self.cur_temperature *= 1.2
-        self.cur_humidity *= 1.5
+        self.cur_temperature += 1
+        self.cur_humidity += 3
 
     # Action 2
     def co2_controller(self):
-        self.cur_temperature *= 0.9
-        self.co2_level *= 1.5
+        self.cur_temperature -= 2
+        self.cur_co2_level += 50
 
     # Action 3
     def roof_vent_controller(self):
-        self.cur_temperature *= 0.7
-        self.cur_humidity *= 0.7
-        self.cur_co2_level *= 0.6
+        self.cur_temperature -= 5
+        self.cur_humidity -= 3
+        self.cur_co2_level -= 50
 
     # Action 4
     def fans_controller(self):
-        self.cur_temperature *= 0.9
-        self.cur_humidity *= 0.9
-    
-        
-  
+        self.cur_temperature -= 2
+        self.cur_humidity -= 2
+
+    # Action 5
+    def maintain_current_environment(self):
+        pass
 
     
