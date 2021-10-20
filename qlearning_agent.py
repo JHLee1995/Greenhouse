@@ -5,64 +5,76 @@ import numpy as np
 import math
 
 class Agent():
-    def __init__(self):
-        self.env = GreenHouse()
-        self.episodes = 300
-        self.min_learning_rate = 0.1
+    def __init__(self, env):
+        self.episodes = 1000
+        self.min_alpha = 0.1
         self.min_epsilon = 0.1
-        self.discount_factor = 1.0
+        self.gamma = 1.0
         self.decay_rate = 25
-
+        '''
+            * State [weight, temperature, humidity, co2_level]
+              Choose the highest state[0] as the number of states
+        '''
+        self.state_space = env.high[0]
         self.steps = np.zeros(self.episodes)
     
-    def choose_action(self, state, epsilon, Q_table):
+    def choose_action(self, env, state, epsilon, Q_table):
         if np.random.random() < epsilon:
-            action = self.env.action_space.sample()
+            action = env.action_space.sample()
         else:
             action = np.argmax(Q_table[state])
         
         return action
 
-    def get_learning_rate(self, episode):
-        return max(self.min_learning_rate, min(1.0, 1.0 - math.log10((episode + 1) / self.decay_rate)))
+    '''
+        learnin rate and exploration rate declines with episodes
+    '''
+    def get_alpha(self, episode):
+        return max(self.min_alpha, min(1.0, 1.0 - math.log10((episode + 1) / self.decay_rate)))
 
     def get_epsilon(self, episode):
         return max(self.min_epsilon, min(1, 1.0 - math.log10((episode + 1) / self.decay_rate)))
 
-    def update_Qtable(self, Q_table, state, next_state, action, reward, learning_rate):
-        Q_table[state][action] += learning_rate * (reward + self.discount_factor * np.max(Q_table[next_state]) - Q_table[state][action])
+
+    def update_Qtable(self, Q_table, state, next_state, action, reward, alpha):
+        Q_table[state][action] += alpha * (reward + self.gamma * np.max(Q_table[next_state]) - Q_table[state][action])
 
 
 if __name__ == "__main__":
-    agent = Agent()
+    env = GreenHouse()
 
-    Q_table = np.zeros((100, agent.env.action_space.n))
+    agent = Agent(env)
+
+    Q_table = np.zeros((agent.state_space, env.action_space.n))
     
     for episode in range(agent.episodes):
-            state = agent.env.reset()
-        
-            learning_rate = agent.get_learning_rate(episode)
-            epsilon = agent.get_epsilon(episode)
+        state = env.reset()
+    
+        alpha = agent.get_alpha(episode)
+        epsilon = agent.get_epsilon(episode)
 
-            done = False
+        done = False
 
-            while not done:
-                agent.steps[episode] += 1
+        while not done:
+            agent.steps[episode] += 1
 
-                action = agent.choose_action(state[0], epsilon, Q_table)
+            action = agent.choose_action(env, state[0], epsilon, Q_table)
 
-                next_state, reward, done = agent.env.step(action)
+            next_state, reward, done = env.step(action)
 
-                agent.update_Qtable(Q_table, state[0], action, reward, next_state[0], learning_rate)
+            agent.update_Qtable(Q_table, state[0], action, reward, next_state[0], alpha)
 
-                state = next_state
+            state = next_state
 
-    # Plot the traning result
-    # x axis : episode range
-    # y axis : steps to reach the plant weight good for harvest
+    '''
+        * Plot the traning result
+          x axis : episode range
+          y axis : steps to reach the plant weight good for harvest
+    '''
     plot = sns.lineplot(x = range(len(agent.steps)), y = agent.steps)
     plt.xlabel("Episode")
     plt.ylabel("Steps")
+    plt.savefig('TrainingResults.png', dpi=300)
     plt.show()
 
 
