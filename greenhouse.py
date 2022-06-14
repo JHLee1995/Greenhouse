@@ -1,174 +1,327 @@
-from gym.spaces import Discrete, Box
-from gym.utils import seeding
-import numpy as np
+from gym.spaces import Discrete
+import random
 
 class GreenHouse:
+    """
+        Initial
+            * choose the 4 variables to determine the plant growth
+                - temperature  -> cur_temp
+                - humidity     -> cur_humidity
+                - co2 level    -> cur_co2
+                - light        -> cur_par
+
+            * set and random outdoor environment and weather 
+                - temperature  -> out_temp
+                - humidity     -> out_humidity
+                - co2 level    -> out_co2
+                - light        -> out_par
+    """
     def __init__(self):
-        """
-            * Variable for plant growth
-            1. temperature
-            2. humidity
-            3. co2
-        """
-        self.ready_for_harvest = 95
-        self.action_space = Discrete(5)
+        self.action_space = Discrete(8)
 
-        self.cur_weight = 10 
-        self.min_weight = 10
-        self.max_weight = 95
-        
-        self.cur_temperature = 55 
-        self.min_temperatue = 35
-        self.max_temperature = 80
+        self.cur_mass = 10 + random.randint(-2, 2)
+        self.harvest_round = 300
 
-        self.cur_humidity = 55 
-        self.min_humidity = 40
+        self.min_temp = 55
+        self.max_temp = 80
+        self.cur_temp = 45 + random.randint(-1, 1)
+
+        self.min_humidity = 60
         self.max_humidity = 100
+        self.cur_humidity = 50 + random.randint(-5, 5)
 
-        self.cur_co2_level = 450
-        self.min_co2_level = 300
-        self.max_co2_level = 1500
+        self.min_co2 = 300
+        self.max_co2 = 1500
+        self.cur_co2 = 300 + random.randint(-250, 250)
 
-        '''
-            * More details for environment  
-        '''
-        # self.outside_temperatue = random.randint(50, 90)
-        # self.outside_humidity = random.randint(50, 95)
-        # self.outside_co2_level = random.randint(100, 2000)
+        self.out_temp = random.randint(50, 90)
+        self.out_humidity = random.randint(50, 95)
+        self.out_co2 = random.randint(100, 2000)
         
-        self.low = np.array([self.min_weight, self.min_temperatue, self.min_humidity, self.min_co2_level], dtype=np.int32)
-        self.high = np.array([self.max_weight, self.max_temperature, self.max_humidity, self.max_co2_level], dtype=np.int32)
+        self.out_par = 0
+    
+        random_weather = Discrete(3)
+        self.weather_set(random_weather.sample())
 
-        self.state = np.array([self.cur_weight, self.cur_temperature, self.cur_humidity, self.cur_co2_level])
-        self.observation_space = Box(self.low, self.high, dtype=np.int32)
-        
+        self.cur_par = self.out_par
+
+        self.ROOF_VENT_OPEN = True
+        self.roof_duration = 5
+
+        self.SHUTTER_OPEN = True
+        self.shutter_duration = 5
+
+        self.state = (
+            self.cur_mass, 
+            self.cur_temp, self.cur_humidity, self.cur_co2, 
+            self.cur_par, self.out_par,
+            self.out_temp, self.out_humidity, self.out_co2
+        )
+
+    """
+        reset the current environment
+    """
+
+    def reset(self):
+        self.cur_mass = 10 + random.randint(-2, 2)
+        self.harvest_round = 300
+
+        self.cur_temp = 45 + random.randint(-1, 1)
+        self.cur_humidity = 50 + random.randint(-5, 5)
+        self.cur_co2 = 300 + random.randint(-250, 250)
+    
+        self.out_temp = random.randint(50, 90)
+        self.out_humidity = random.randint(50, 95)
+        self.out_co2 = random.randint(100, 2000)
+        self.out_par = 0
+
+        random_weather = Discrete(3)
+        self.weather_set(random_weather.sample())
+
+        self.cur_par = self.out_par
+
+        self.ROOF_VENT_OPEN = True
+        self.roof_duration = 5
+
+        self.SHUTTER_OPEN = True
+        self.shutter_duration = 5
+
+        self.state = (
+             self.cur_mass, 
+             self.cur_temp, self.cur_humidity, self.cur_co2, 
+             self.cur_par, self.out_par,
+             self.out_temp, self.out_humidity, self.out_co2
+        )
+
+        return self.state
+
+    """
+        Step
+            * record the current weight bofore the impact of action to determine the reward
+            * if variavle is out of boundary set reward equal to -1
+            * if action's impact bring the weight increase set reward equal to 1 else -1
+    """
 
     def step(self, action):
-        prev_weight = self.cur_weight
-        
-        '''
-            take action and check the variable boundary
-            if the variable over the max range use clip function set it as the max
-        '''
-        self.plant_growth(action)
-        self.cur_temperature = np.clip(self.cur_temperature, self.min_temperatue, self.max_temperature)
-        self.cur_humidity = np.clip(self.cur_humidity, self.min_humidity, self.max_humidity)
-        self.cur_co2_level = np.clip(self.cur_co2_level, self.min_co2_level, self.max_co2_level)
+        prev_mass = self.cur_mass
+        self.harvest_round -= 1
 
-        self.environment_for_growth()
+        self.environment_interaction(action)
 
-        '''
-            set prev_weight to record the plant weight before the action
-            difference represents the accumulation of plant weight
-        '''
-        if self.cur_weight - prev_weight > 0:
+        if not self.indoor_variable_boundary_valid():
+            self.environment_for_growth()
+        else:
+            self.cur_mass -= 1
+       
+        if self.cur_mass - prev_mass > 0:
             reward = 1
         else:
             reward = -1
 
-        '''
-            If the plant weight matched the harvest weight
-            treat one episode as done
-        '''
-        if self.cur_weight >= self.ready_for_harvest:
+        if self.harvest_round == 0:
             done = True
         else:
             done = False
 
-        cur_state = np.array([self.cur_weight, self.cur_temperature, self.cur_humidity, self.cur_co2_level])
-        return cur_state, reward, done
+        state = (
+             self.cur_mass, 
+             self.cur_temp, self.cur_humidity, self.cur_co2, 
+             self.cur_par, self.out_par, 
+             self.out_temp, self.out_humidity, self.out_co2
+        )
+
+        return state, reward, done
+
+    """
+        Check the variable is valid or not
+            * compare current with min/max boundary
+    """
+    def indoor_variable_boundary_valid(self):
+        if self.cur_temp > self.max_temp or self.cur_temp < self.min_temp:
+            return True
+        elif self.cur_co2 > self.max_co2 or self.cur_co2 < self.min_co2:
+            return True
+        elif self.cur_humidity > self.max_humidity or self.cur_humidity < self.min_humidity:
+            return True
+
+        return False
 
 
-    def reset(self):
-        '''
-            * reset the variable
-        '''
-        self.cur_weight = 10
-        self.cur_temperature = 55
-        self.cur_humidity = 55
-        self.cur_co2_level = 450
+    """
+        Set random weather 
+            * 0 : clear day
+                with better lighting conditions, plant photosynthesis increasing
+                    - temperature incresing
+                    - humidity decreasing
+                    - co2 decreasing
 
-        self.state = np.array([self.cur_weight, self.cur_temperature, self.cur_humidity, self.cur_co2_level])
-        
-        return self.state
+            * 1 : cloudy day
+                with moderate lighting conditions, plant photosynthesis decreasing
+                    - temperature increasing moderately 
+                    - humidity increasing moderately
+                    - co2 increasing
+
+            * 2 : raniny day
+                with worst lighting conditions, plant almost stop photosynthesis
+                    - temperature decreasing
+                    - humidity increasing sharply
+                    - co2 increasing 
+    """
+    def weather_set(self, cur_weather):
+        if cur_weather == 0:
+            self.out_par += random.randint(500, 800)
+            self.out_temp += random.randint(1, 10)
+            self.out_humidity += random.randint(-10, 10)
+            self.out_co2 += random.randint(-250, -200)
+        elif cur_weather == 1:
+            self.out_par += random.randint(200, 499)
+            self.out_temp += random.randint(-5, 5)
+            self.out_humidity += random.randint(1, 10)
+            self.out_co2 += random.randint(1, 200)
+        else:
+            self.out_par += random.randint(1, 199)
+            self.out_temp += random.randint(-10, -1)
+            self.out_humidity += random.randint(15, 20)
+            self.out_co2 += random.randint(150, 300)
 
 
-    '''
-        * action take 
-        0. adjust temperature 
-            - 50F < enviroment temperature < 80F 
 
-        1. adjust humidifier
-            - 40 < environment humidity < 100
-
-        2. co2 tank      
-            - 300 < environment co2 level < 1500
-
-        3. roof vent  
-            - indoor/outdoor temperature
-            - co2 level decrease
-            - indoor/outdoor humidity    
-
-        5. fans
-            - indoor temperature
-            - indoor humidity
-
-        6. maintain the current environment
-            - indoor temperature/humidity/co2
-    '''
-    def plant_growth(self, action):
+    def environment_interaction(self, action):
         if action == 0:
-            self.temperature_controller()
+            self.heater()
         elif action == 1:
-            self.humidifier_controller()
+            self.cooler()
         elif action == 2:
-            self.co2_controller()
+            self.humidity_controller()
         elif action == 3:
-            self.roof_vent_controller()
+            self.co2_controller()
         elif action == 4:
-            self.fans_controller()
+            self.shutter()
         elif action == 5:
-            self.maintain_current_environment()
+            self.roof_vent()
+        elif action == 6:
+            self.HAF_FANS()
+        else:
+            self.maintain()
 
-        
-    '''
-        Check if the environment good for growth
-        expanded the range for growth to accelerate training speed
-    '''
+
+    """
+        Check the environment is good for plant growth
+            * narrow the range which good for plant growth to make sure training steps are useful
+            * avoid the situation like every possible action could make plant growth
+            * when the shutter open, add photosynthesis help plant growth
+    """
     def environment_for_growth(self):
-        if (self.cur_temperature > 40 and self.cur_temperature < 75 
-        and self.cur_humidity > 45 and self.cur_humidity < 95 
-        and self.cur_co2_level > 500 and self.cur_co2_level < 1400):
-            self.cur_weight += 5
+        if (self.cur_temp > 62 and self.cur_temp < 68 
+        and self.cur_humidity > 70 and self.cur_humidity < 75 
+        and self.cur_co2 > 1000 and self.cur_co2 < 1200):
+            self.cur_mass += 1
 
-    # Action 0
-    def temperature_controller(self):
-        self.cur_temperature += 3
-        self.cur_humidity += 1
+        if self.cur_par != 0:
+            self.photosynthesis()
 
-    # Action 1
-    def humidifier_controller(self):
-        self.cur_temperature += 1
+    def photosynthesis(self):
+        round = 5
+        while round:
+            self.cur_co2 -= 10
+            self.cur_humidity -= 1
+            round -= 1
+
+        self.cur_mass += 1        
+
+
+    """
+        Actions
+            * narrow the impact of each action, make each action bring the unique variable change
+            * 0 : heater     control
+            * 1 : cooler     control
+            * 2 : humidity   control
+            * 3 : co2 level  control
+            * 4 : shutter    control
+            * 5 : roof vent  control
+            * 6 : FANS       control
+            * 7 : maintain do nothing
+    """
+    def heater(self):
+        self.cur_temp += 1
+
+    def cooler(self):
+        self.cur_temp -= 1
+
+    def humidity_controller(self):
         self.cur_humidity += 3
 
-    # Action 2
     def co2_controller(self):
-        self.cur_temperature -= 2
-        self.cur_co2_level += 50
+        self.cur_co2 += 50
 
-    # Action 3
-    def roof_vent_controller(self):
-        self.cur_temperature -= 5
+    def HAF_FANS(self):
+        self.cur_temp -= 3
         self.cur_humidity -= 3
-        self.cur_co2_level -= 50
 
-    # Action 4
-    def fans_controller(self):
-        self.cur_temperature -= 2
-        self.cur_humidity -= 2
-
-    # Action 5
-    def maintain_current_environment(self):
+    def maintain(self):
         pass
+    
+    """
+        Shutter & Roof Vent control
+            * set initial round with 5
+            * if round finished, set shutter/ roof vent close(False)
+            * after the first round is finished, the subsequent action will set the round as 5 and open again
+            * shutter open will directly get outdoor light
+            * roof vent open will let the indoor environment interact with the outdoor environment
+    """
+    def shutter(self):
+        if self.SHUTTER_OPEN and self.shutter_duration != 0:
+            self.cur_par = self.out_par
+            self.shutter_duration -= 1
+        elif self.SHUTTER_OPEN and self.shutter_duration == 0:
+            self.cur_par = 0
+            self.SHUTTER_OPEN = False
+        else:
+            self.cur_par = self.out_par
+            self.shutter_duration = 5
+            self.SHUTTER_OPEN = True
+            self.shutter_duration -= 1
+             
+    def roof_vent(self):
+        if self.ROOF_VENT_OPEN and self.roof_duration != 0:
+            self.interaction_with_outside()
+            self.roof_duration -= 1
+        elif self.ROOF_VENT_OPEN and self.roof_duration == 0:
+            self.ROOF_VENT_OPEN = False
+        else:
+            self.interaction_with_outside()
+            self.roof_duration = 5
+            self.ROOF_VENT_OPEN = True
+            self.roof_duration -= 1
+
+    """ 
+        Indoor environment interact with outdoor environment
+            * set an factor let the indoor interact with outdoor slowly    
+    """
+    def interaction_with_outside(self):
+        temp_offset = self.cur_temp - self.out_temp
+        humidity_offset = self.cur_humidity - self.out_humidity
+        co2_offset = self.cur_co2 - self.out_co2
+
+        gradient = random.uniform(0.1, 0.5)
+        
+        self.cur_temp += gradient * (abs(temp_offset) if temp_offset < 0 else temp_offset)
+        self.cur_humidity += gradient * (abs(humidity_offset) if humidity_offset < 0 else humidity_offset)
+        self.cur_co2 += gradient * (abs(co2_offset) if co2_offset < 0 else co2_offset)
 
     
+
+    
+
+    
+
+
+
+    
+
+
+
+
+
+
+
